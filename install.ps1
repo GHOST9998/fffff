@@ -54,7 +54,7 @@ Write-Output("Done")
 
 # https://stackoverflow.com/a/31845512
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-git clone https://github.com/GeekTG/Friendly-Telegram
+git clone https://github.com/fast-geek/Friendly-Telegram
 
 Set-Location Friendly-Telegram
 python -m pip install -r requirements.txt
