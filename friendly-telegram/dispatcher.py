@@ -20,6 +20,7 @@ import asyncio
 import collections
 import logging
 import re
+import telethon
 
 from . import utils, main, security
 
@@ -269,13 +270,36 @@ class CommandDispatcher:
             logging.debug("Message is blacklisted")
             return
         for func in self._modules.watchers:
+            bl = self._db.get(main.__name__, "disabled_watchers", {})
+            modname = str(func.__self__.__class__.strings['name'])
+            if modname in bl and type(message) is telethon.tl.types.Message:
+                if '*' in bl[modname] or utils.get_chat_id(message) in bl[modname]:
+                    logging.debug(f'Ignored watcher of module {modname}')
+                    continue
+
+                if 'only_chats' in bl[modname] and message.is_private:
+                    logging.debug(f'Ignored watcher of module {modname}')
+                    continue
+
+                if 'only_pm' in bl[modname] and not message.is_private:
+                    logging.debug(f'Ignored watcher of module {modname}')
+                    continue
+
+                if 'out' in bl[modname] and not message.out:
+                    logging.debug(f'Ignored watcher of module {modname}')
+                    continue
+
+                if 'in' in bl[modname] and message.out:
+                    logging.debug(f'Ignored watcher of module {modname}')
+                    continue
+
             if str(utils.get_chat_id(message)) + "." + func.__self__.__module__ in blacklist_chats:
                 logging.debug("Command is blacklisted in chat")
-                return
+                continue
             if (whitelist_modules and str(utils.get_chat_id(message)) + "." +
                     func.__self__.__module__ not in whitelist_modules):
                 logging.debug("Command is not whitelisted in chat")
-                return
+                continue
             try:
                 await func(message)
             except Exception as e:
