@@ -20,8 +20,10 @@ import asyncio
 import collections
 import logging
 import re
-
 from telethon import types
+import os
+import json
+import time
 
 from . import utils, main, security
 
@@ -58,6 +60,11 @@ class CommandDispatcher:
         me = await client.get_me()
         self._me = me.id
         self._cached_username = me.username.lower() if me.username else str(me.id)
+        self.stats_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), f'../../stats-{me.id}.json')
+        try:
+            self.stats = json.loads(open(self.stats_file, 'r').read())
+        except:
+            self.stats = {}
 
     async def _handle_ratelimit(self, message, func):
         if self._testing or await self.security.check(message, security.OWNER | security.SUDO | security.SUPPORT):
@@ -138,6 +145,15 @@ class CommandDispatcher:
             return  # Message is just the prefix
         utils.relocate_entities(message.entities, -len(prefix))
 
+
+        try:
+            initiator = event.from_id.user_id
+        except Exception:
+            try:
+                initiator = event.from_id
+            except Exception:
+                initiator = 0
+
         command = message.message.split(maxsplit=1)[0]
         tag = command.split("@", maxsplit=1)
         if not self._testing:
@@ -149,10 +165,14 @@ class CommandDispatcher:
                     return
             elif event.mentioned and event.message is not None and event.message.message is not None and '@' + self._cached_username not in event.message.message:
                 pass
-            elif not self.no_nickname:
-                if not event.is_private and not event.out and not self._db.get(main.__name__, 'no_nickname', False):
-                    return
-        logging.debug(tag[0])
+            elif not event.is_private and not self.no_nickname: # DM
+                if not event.out: # Outcoming message
+                    if not self._db.get(main.__name__, 'no_nickname', False): # Global NoNick
+                        if command not in self._db.get(main.__name__, 'nonickcmds', []): # NoNick for commands
+                            if initiator not in self._db.get(main.__name__, 'nonickusers', []): # NoNick for users
+                                return
+
+        # logging.debug(tag[0])
 
         txt, func = self._modules.dispatch(tag[0])
         if func is not None:
@@ -244,6 +264,16 @@ class CommandDispatcher:
 
 
             try:
+                try:
+                    if self._me == message.from_id:
+                        module_name = func.__self__.__class__.strings['name']
+                        if module_name not in self.stats:
+                            self.stats[module_name] = []
+                        self.stats[module_name].append(round(time.time()))
+                        open(self.stats_file, 'w').write(json.dumps(self.stats))
+                except:
+                    logging.exception(f"Registering stats for {txt} failed")
+
                 await func(message)
             except Exception as e:
                 logging.exception("Command failed")
